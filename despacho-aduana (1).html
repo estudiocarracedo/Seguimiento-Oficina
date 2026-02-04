@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Seguimiento - Despacho de Aduana</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #0a4d68;
+            --primary-light: #088395;
+            --accent: #05bfdb;
+            --success: #00c48c;
+            --warning: #ffa41b;
+            --danger: #ff6b6b;
+            --bg-dark: #0d1b2a;
+            --bg-card: #1b263b;
+            --bg-light: #415a77;
+            --text: #e0e1dd;
+            --text-muted: #778da9;
+            --border: #2d3e50;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #162a40 100%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: rgba(27, 38, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            padding: 25px 30px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 300;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(27, 38, 59, 0.5);
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent);
+            box-shadow: 0 8px 24px rgba(5, 191, 219, 0.2);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .toolbar {
+            background: rgba(27, 38, 59, 0.5);
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-light), var(--accent));
+            color: white;
+            box-shadow: 0 4px 12px rgba(5, 191, 219, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(5, 191, 219, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--bg-light);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card);
+            border-color: var(--accent);
+        }
+
+        input, select {
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-card);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(5, 191, 219, 0.1);
+        }
+
+        .operations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 20px;
+        }
+
+        .operation-card {
+            background: rgba(27, 38, 59, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .operation-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--accent);
+        }
+
+        .operation-card.completado::before { background: var(--success); }
+        .operation-card.pendiente::before { background: var(--warning); }
+        .operation-card.detenido::before { background: var(--danger); }
+
+        .operation-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+            border-color: var(--accent);
+        }
+
+        .operation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+
+        .operation-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .operation-status {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-completado { background: rgba(0, 196, 140, 0.2); color: var(--success); }
+        .status-pendiente { background: rgba(255, 164, 27, 0.2); color: var(--warning); }
+        .status-en-curso { background: rgba(5, 191, 219, 0.2); color: var(--accent); }
+        .status-detenido { background: rgba(255, 107, 107, 0.2); color: var(--danger); }
+
+        .operation-detail {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: start;
+            gap: 10px;
+        }
+
+        .detail-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            min-width: 90px;
+        }
+
+        .detail-value {
+            color: var(--text);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .operation-footer {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 0.8rem;
+            flex: 1;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(13, 27, 42, 0.95);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 40px 20px;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.8rem;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .close-modal:hover {
+            background: var(--bg-light);
+            color: var(--text);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 768px) {
+            .operations-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn, input, select {
+                width: 100%;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .alert {
+            background: rgba(255, 164, 27, 0.1);
+            border: 1px solid var(--warning);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: var(--warning);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚢 Seguimiento Estudio Carracedo</h1>
+            <p class="subtitle">Gestión integral de despachos de aduana</p>
+        </header>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="openNewOperationModal()">
+                + Nueva Operación
+            </button>
+            <input type="text" id="searchInput" placeholder="🔍 Buscar por carpeta, cliente, proveedor...">
+            <select id="filterStatus">
+                <option value="">Todos los estados</option>
+                <option value="Pendiente">Pendiente</option>
+                <option value="En curso">En curso</option>
+                <option value="Detenido">Detenido</option>
+                <option value="Completado">Completado</option>
+            </select>
+            <select id="filterClient">
+                <option value="">Todos los clientes</option>
+            </select>
+            <button class="btn btn-secondary" onclick="exportToExcel()">
+                📊 Exportar Excel
+            </button>
+            <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">
+                📥 Importar Excel
+            </button>
+            <input type="file" id="importFile" accept=".xlsx" style="display: none;" onchange="importFromExcel(event)">
+        </div>
+
+        <div class="operations-grid" id="operationsGrid"></div>
+    </div>
+
+    <div class="modal" id="operationModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Nueva Operación</h2>
+                <button class="close-modal" onclick="closeModal()">×</button>
+            </div>
+            <form id="operationForm" onsubmit="saveOperation(event)">
+                <div class="form-group">
+                    <label>Número de Carpeta *</label>
+                    <input type="text" id="numeroCarpeta" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipo de Operación *</label>
+                        <select id="tipoOperacion" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="Importación">Importación</option>
+                            <option value="Exportación">Exportación</option>
+                            <option value="Zona Franca">Zona Franca</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Cliente *</label>
+                        <input type="text" id="cliente" list="clientesList" required>
+                        <datalist id="clientesList"></datalist>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Proveedor</label>
+                    <input type="text" id="proveedor">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Fecha Ingreso *</label>
+                        <input type="date" id="fechaIngreso" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Estado ANMAT</label>
+                        <select id="estadoAnmat">
+                            <option value="">Seleccionar...</option>
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="En revisión">En revisión</option>
+                            <option value="Aprobado">Aprobado</option>
+                            <option value="Rechazado">Rechazado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Guía Original</label>
+                        <select id="guiaOriginal">
+                            <option value="">Seleccionar...</option>
+                            <option value="Sí">Sí</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Valor en Ana (USD)</label>
+                        <input type="number" id="valorAna" step="0.01">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>VEP (USD)</label>
+                        <input type="number" id="vepUsd" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>VEP (Pesos)</label>
+                        <input type="number" id="vepPesos" step="0.01">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Estado Operación *</label>
+                    <select id="estadoOperacion" required>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="En curso">En curso</option>
+                        <option value="Detenido">Detenido</option>
+                        <option value="Completado">Completado</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Número de Despacho</label>
+                        <input type="text" id="numeroDespacho">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha Oficialización</label>
+                        <input type="date" id="fechaOf">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 15px; margin-top: 30px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Guardar</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()" style="flex: 1;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let operations = [];
+        let editingId = null;
+
+        // Cargar datos del localStorage al iniciar
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromStorage();
+            renderStats();
+            renderOperations();
+            updateClientFilter();
+            setupFilters();
+            document.getElementById('fechaIngreso').valueAsDate = new Date();
+        });
+
+        function loadFromStorage() {
+            const stored = localStorage.getItem('aduanaOperations');
+            if (stored) {
+                operations = JSON.parse(stored);
+            }
+        }
+
+        function saveToStorage() {
+            localStorage.setItem('aduanaOperations', JSON.stringify(operations));
+        }
+
+        function renderStats() {
+            const stats = {
+                total: operations.length,
+                pendiente: operations.filter(o => o.estadoOperacion === 'Pendiente').length,
+                enCurso: operations.filter(o => o.estadoOperacion === 'En curso').length,
+                completado: operations.filter(o => o.estadoOperacion === 'Completado').length,
+                detenido: operations.filter(o => o.estadoOperacion === 'Detenido').length
+            };
+
+            const statsHtml = `
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--accent);">${stats.total}</div>
+                    <div class="stat-label">Total Operaciones</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--warning);">${stats.pendiente}</div>
+                    <div class="stat-label">Pendientes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--primary-light);">${stats.enCurso}</div>
+                    <div class="stat-label">En Curso</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--success);">${stats.completado}</div>
+                    <div class="stat-label">Completados</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--danger);">${stats.detenido}</div>
+                    <div class="stat-label">Detenidos</div>
+                </div>
+            `;
+            document.getElementById('statsGrid').innerHTML = statsHtml;
+        }
+
+        function renderOperations() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filterStatus = document.getElementById('filterStatus').value;
+            const filterClient = document.getElementById('filterClient').value;
+
+            let filtered = operations.filter(op => {
+                const matchSearch = !searchTerm || 
+                    op.numeroCarpeta.toLowerCase().includes(searchTerm) ||
+                    op.cliente.toLowerCase().includes(searchTerm) ||
+                    (op.proveedor && op.proveedor.toLowerCase().includes(searchTerm));
+                const matchStatus = !filterStatus || op.estadoOperacion === filterStatus;
+                const matchClient = !filterClient || op.cliente === filterClient;
+                return matchSearch && matchStatus && matchClient;
+            });
+
+            // Ordenar: primero no completados, luego completados. Dentro de cada grupo por número de carpeta
+            filtered.sort((a, b) => {
+                // Prioridad: Completado va al final
+                const aCompleted = a.estadoOperacion === 'Completado' ? 1 : 0;
+                const bCompleted = b.estadoOperacion === 'Completado' ? 1 : 0;
+                
+                if (aCompleted !== bCompleted) {
+                    return aCompleted - bCompleted;
+                }
+                
+                // Dentro del mismo estado, ordenar por número de carpeta (descendente)
+                return b.numeroCarpeta.localeCompare(a.numeroCarpeta, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            if (filtered.length === 0) {
+                document.getElementById('operationsGrid').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📦</div>
+                        <h3>No hay operaciones</h3>
+                        <p>Agrega tu primera operación para comenzar</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = filtered.map(op => {
+                const daysSince = Math.floor((new Date() - new Date(op.fechaIngreso)) / (1000 * 60 * 60 * 24));
+                const isDelayed = op.estadoOperacion === 'Pendiente' && daysSince > 15;
+                const statusClass = op.estadoOperacion.toLowerCase().replace(' ', '-');
+
+                return `
+                    <div class="operation-card ${statusClass}">
+                        <div class="operation-header">
+                            <div class="operation-number">${op.numeroCarpeta}</div>
+                            <div class="operation-status status-${statusClass}">${op.estadoOperacion}</div>
+                        </div>
+                        <div class="operation-detail">
+                            <span class="detail-label">Cliente:</span>
+                            <span class="detail-value">${op.cliente}</span>
+                        </div>
+                        <div class="operation-detail">
+                            <span class="detail-label">Tipo:</span>
+                            <span class="detail-value">${op.tipoOperacion}</span>
+                        </div>
+                        ${op.proveedor ? `
+                        <div class="operation-detail">
+                            <span class="detail-label">Proveedor:</span>
+                            <span class="detail-value">${op.proveedor}</span>
+                        </div>` : ''}
+                        <div class="operation-detail">
+                            <span class="detail-label">Ingreso:</span>
+                            <span class="detail-value">${formatDate(op.fechaIngreso)} (hace ${daysSince} días)</span>
+                        </div>
+                        ${op.estadoAnmat ? `
+                        <div class="operation-detail">
+                            <span class="detail-label">ANMAT:</span>
+                            <span class="detail-value">${op.estadoAnmat}</span>
+                        </div>` : ''}
+                        ${op.numeroDespacho ? `
+                        <div class="operation-detail">
+                            <span class="detail-label">N° Despacho:</span>
+                            <span class="detail-value">${op.numeroDespacho}</span>
+                        </div>` : ''}
+                        ${isDelayed ? '<div class="alert">⚠️ Operación demorada: más de 15 días</div>' : ''}
+                        <div class="operation-footer">
+                            <button class="btn btn-secondary btn-small" onclick="editOperation('${op.id}')">Editar</button>
+                            <button class="btn btn-secondary btn-small" onclick="deleteOperation('${op.id}')">Eliminar</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('operationsGrid').innerHTML = html;
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString + 'T00:00:00');
+            return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        function openNewOperationModal() {
+            editingId = null;
+            document.getElementById('modalTitle').textContent = 'Nueva Operación';
+            document.getElementById('operationForm').reset();
+            document.getElementById('fechaIngreso').valueAsDate = new Date();
+            document.getElementById('operationModal').classList.add('active');
+        }
+
+        function editOperation(id) {
+            editingId = id;
+            const op = operations.find(o => o.id === id);
+            if (!op) return;
+
+            document.getElementById('modalTitle').textContent = 'Editar Operación';
+            document.getElementById('numeroCarpeta').value = op.numeroCarpeta;
+            document.getElementById('tipoOperacion').value = op.tipoOperacion;
+            document.getElementById('cliente').value = op.cliente;
+            document.getElementById('proveedor').value = op.proveedor || '';
+            document.getElementById('fechaIngreso').value = op.fechaIngreso;
+            document.getElementById('estadoAnmat').value = op.estadoAnmat || '';
+            document.getElementById('guiaOriginal').value = op.guiaOriginal || '';
+            document.getElementById('valorAna').value = op.valorAna || '';
+            document.getElementById('vepUsd').value = op.vepUsd || '';
+            document.getElementById('vepPesos').value = op.vepPesos || '';
+            document.getElementById('estadoOperacion').value = op.estadoOperacion;
+            document.getElementById('numeroDespacho').value = op.numeroDespacho || '';
+            document.getElementById('fechaOf').value = op.fechaOf || '';
+
+            document.getElementById('operationModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('operationModal').classList.remove('active');
+        }
+
+        function saveOperation(event) {
+            event.preventDefault();
+
+            const formData = {
+                id: editingId || Date.now().toString(),
+                numeroCarpeta: document.getElementById('numeroCarpeta').value,
+                tipoOperacion: document.getElementById('tipoOperacion').value,
+                cliente: document.getElementById('cliente').value,
+                proveedor: document.getElementById('proveedor').value,
+                fechaIngreso: document.getElementById('fechaIngreso').value,
+                estadoAnmat: document.getElementById('estadoAnmat').value,
+                guiaOriginal: document.getElementById('guiaOriginal').value,
+                valorAna: document.getElementById('valorAna').value,
+                vepUsd: document.getElementById('vepUsd').value,
+                vepPesos: document.getElementById('vepPesos').value,
+                estadoOperacion: document.getElementById('estadoOperacion').value,
+                numeroDespacho: document.getElementById('numeroDespacho').value,
+                fechaOf: document.getElementById('fechaOf').value
+            };
+
+            if (editingId) {
+                const index = operations.findIndex(o => o.id === editingId);
+                operations[index] = formData;
+            } else {
+                operations.push(formData);
+            }
+
+            saveToStorage();
+            closeModal();
+            renderStats();
+            renderOperations();
+            updateClientFilter();
+        }
+
+        function deleteOperation(id) {
+            if (confirm('¿Estás seguro de eliminar esta operación?')) {
+                operations = operations.filter(o => o.id !== id);
+                saveToStorage();
+                renderStats();
+                renderOperations();
+                updateClientFilter();
+            }
+        }
+
+        function updateClientFilter() {
+            const clients = [...new Set(operations.map(o => o.cliente))].sort();
+            const datalist = document.getElementById('clientesList');
+            const select = document.getElementById('filterClient');
+            
+            datalist.innerHTML = clients.map(c => `<option value="${c}">`).join('');
+            select.innerHTML = '<option value="">Todos los clientes</option>' + 
+                clients.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        function setupFilters() {
+            document.getElementById('searchInput').addEventListener('input', renderOperations);
+            document.getElementById('filterStatus').addEventListener('change', renderOperations);
+            document.getElementById('filterClient').addEventListener('change', renderOperations);
+        }
+
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+            
+            const data = operations.map(op => ({
+                'Número de Carpeta': op.numeroCarpeta,
+                'Tipo de Operación': op.tipoOperacion,
+                'Cliente': op.cliente,
+                'Proveedor': op.proveedor,
+                'Fecha Ingreso': op.fechaIngreso,
+                'Estado ANMAT': op.estadoAnmat,
+                'Guía Original': op.guiaOriginal,
+                'Valor en Ana u$': op.valorAna,
+                'Vep u$': op.vepUsd,
+                'Vep Pesos': op.vepPesos,
+                'Estado Operación': op.estadoOperacion,
+                'N Despa': op.numeroDespacho,
+                'Fecha Of': op.fechaOf
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, 'Seguimiento Operaciones');
+
+            XLSX.writeFile(wb, `Seguimiento_Aduana_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                const imported = jsonData.map((row, index) => ({
+                    id: Date.now().toString() + index,
+                    numeroCarpeta: row['Número de Carpeta'] || '',
+                    tipoOperacion: row['Tipo de Operación'] || 'Importación',
+                    cliente: row['Cliente'] || '',
+                    proveedor: row['Proveedor'] || '',
+                    fechaIngreso: row['Fecha Ingreso'] ? excelDateToJS(row['Fecha Ingreso']) : new Date().toISOString().split('T')[0],
+                    estadoAnmat: row['Estado ANMAT'] || '',
+                    guiaOriginal: row['Guía Original'] || '',
+                    valorAna: row['Valor en Ana u$'] || '',
+                    vepUsd: row['Vep u$'] || '',
+                    vepPesos: row['Vep Pesos'] || '',
+                    estadoOperacion: row['Estado Operación'] || 'Pendiente',
+                    numeroDespacho: row['N Despa'] || '',
+                    fechaOf: row['Fecha Of'] ? excelDateToJS(row['Fecha Of']) : ''
+                }));
+
+                operations = imported;
+                saveToStorage();
+                renderStats();
+                renderOperations();
+                updateClientFilter();
+                alert(`${imported.length} operaciones importadas correctamente`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function excelDateToJS(excelDate) {
+            if (typeof excelDate === 'string') return excelDate;
+            const date = new Date((excelDate - 25569) * 86400 * 1000);
+            return date.toISOString().split('T')[0];
+        }
+    </script>
+</body>
+</html>
