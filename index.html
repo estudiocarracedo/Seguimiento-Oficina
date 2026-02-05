@@ -427,6 +427,9 @@
             <button class="btn btn-primary" onclick="openNewOperationModal()">
                 + Nueva Operación
             </button>
+            <button class="btn btn-secondary" onclick="copyShareLink()" title="Copiar link para compartir entre dispositivos">
+                🔗 Copiar Link
+            </button>
             <input type="text" id="searchInput" placeholder="🔍 Buscar por carpeta, cliente, proveedor...">
             <select id="filterStatus">
                 <option value="">Todos los estados</option>
@@ -556,11 +559,13 @@
         let operations = [];
         let editingId = null;
         let exchangeRate = 0;
+        let workspaceId = null;
 
-        // Cargar datos del localStorage al iniciar
-        window.addEventListener('DOMContentLoaded', () => {
-            loadFromStorage();
-            loadExchangeRate();
+        // Cargar datos del almacenamiento en la nube al iniciar
+        window.addEventListener('DOMContentLoaded', async () => {
+            initWorkspace();
+            await loadFromCloud();
+            await loadExchangeRate();
             renderStats();
             renderOperations();
             updateClientFilter();
@@ -569,19 +574,105 @@
             setupVepCalculation();
         });
 
-        function loadExchangeRate() {
-            const stored = localStorage.getItem('exchangeRate');
-            if (stored) {
-                exchangeRate = parseFloat(stored);
-                document.getElementById('exchangeRate').value = exchangeRate;
-                updateExchangeRateDisplay();
+        function initWorkspace() {
+            // Obtener o crear workspace ID desde la URL hash
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                workspaceId = hash;
+            } else {
+                // Crear nuevo workspace ID único
+                workspaceId = 'ws_' + Date.now() + '_' + Math.random().toString(36).substring(7);
+                window.location.hash = workspaceId;
+            }
+            showWorkspaceInfo();
+        }
+
+        function showWorkspaceInfo() {
+            const shareUrl = window.location.href;
+            console.log('Tu link compartido:', shareUrl);
+            // Mostrar mensaje inicial solo la primera vez
+            if (!window.location.hash || window.location.hash === '#') {
+                setTimeout(() => {
+                    alert('✅ Workspace creado!\n\nGuardá este link para acceder desde cualquier dispositivo:\n\n' + shareUrl + '\n\nTambién podés copiarlo desde la barra de direcciones.');
+                }, 1000);
             }
         }
 
-        function saveExchangeRate() {
+        async function loadFromCloud() {
+            if (!window.storage) {
+                console.warn('Cloud storage no disponible, usando localStorage como fallback');
+                loadFromStorage();
+                return;
+            }
+            
+            try {
+                const key = 'ops_' + workspaceId;
+                const result = await window.storage.get(key, true);
+                if (result && result.value) {
+                    operations = JSON.parse(result.value);
+                }
+            } catch (error) {
+                console.log('No hay operaciones guardadas en la nube, intentando localStorage');
+                loadFromStorage();
+            }
+        }
+
+        async function saveToCloud() {
+            // Guardar tanto en cloud como en localStorage como backup
+            saveToStorage();
+            
+            if (!window.storage) {
+                return;
+            }
+            
+            try {
+                const key = 'ops_' + workspaceId;
+                await window.storage.set(key, JSON.stringify(operations), true);
+            } catch (error) {
+                console.error('Error al guardar en la nube:', error);
+            }
+        }
+
+        async function loadExchangeRate() {
+            if (!window.storage) {
+                const stored = localStorage.getItem('exchangeRate_' + workspaceId);
+                if (stored) {
+                    exchangeRate = parseFloat(stored);
+                    document.getElementById('exchangeRate').value = exchangeRate;
+                    updateExchangeRateDisplay();
+                }
+                return;
+            }
+            
+            try {
+                const key = 'rate_' + workspaceId;
+                const result = await window.storage.get(key, true);
+                if (result && result.value) {
+                    exchangeRate = parseFloat(result.value);
+                    document.getElementById('exchangeRate').value = exchangeRate;
+                    updateExchangeRateDisplay();
+                }
+            } catch (error) {
+                console.log('No hay tipo de cambio guardado');
+            }
+        }
+
+        async function saveExchangeRate() {
             exchangeRate = parseFloat(document.getElementById('exchangeRate').value) || 0;
-            localStorage.setItem('exchangeRate', exchangeRate);
-            updateExchangeRateDisplay();
+            localStorage.setItem('exchangeRate_' + workspaceId, exchangeRate);
+            
+            if (!window.storage) {
+                updateExchangeRateDisplay();
+                return;
+            }
+            
+            try {
+                const key = 'rate_' + workspaceId;
+                await window.storage.set(key, exchangeRate.toString(), true);
+                updateExchangeRateDisplay();
+            } catch (error) {
+                console.error('Error al guardar tipo de cambio');
+            }
         }
 
         function updateExchangeRateDisplay() {
@@ -606,14 +697,14 @@
         }
 
         function loadFromStorage() {
-            const stored = localStorage.getItem('aduanaOperations');
+            const stored = localStorage.getItem('aduanaOperations_' + workspaceId);
             if (stored) {
                 operations = JSON.parse(stored);
             }
         }
 
         function saveToStorage() {
-            localStorage.setItem('aduanaOperations', JSON.stringify(operations));
+            localStorage.setItem('aduanaOperations_' + workspaceId, JSON.stringify(operations));
         }
 
         function renderStats(filteredOps = null) {
@@ -826,7 +917,7 @@
                 operations.push(formData);
             }
 
-            saveToStorage();
+            saveToCloud();
             closeModal();
             renderStats();
             renderOperations();
@@ -836,7 +927,7 @@
         function deleteOperation(id) {
             if (confirm('¿Estás seguro de eliminar esta operación?')) {
                 operations = operations.filter(o => o.id !== id);
-                saveToStorage();
+                saveToCloud();
                 renderStats();
                 renderOperations();
                 updateClientFilter();
@@ -860,12 +951,21 @@
             });
 
             if (updated > 0) {
-                saveToStorage();
+                saveToCloud();
                 renderOperations();
                 alert(`✅ Se recalculó el VEP en pesos de ${updated} operación(es) usando el tipo de cambio: $${exchangeRate.toLocaleString('es-AR')}`);
             } else {
                 alert('No hay operaciones con VEP en USD para recalcular.');
             }
+        }
+
+        function copyShareLink() {
+            const shareUrl = window.location.href;
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert('✅ Link copiado al portapapeles!\n\nUsá este link en todos tus dispositivos para acceder a los mismos datos:\n\n' + shareUrl + '\n\n💡 Guardalo en favoritos o notas para no perderlo.');
+            }).catch(() => {
+                prompt('Copiá este link para compartir entre dispositivos:', shareUrl);
+            });
         }
 
         function updateClientFilter() {
@@ -938,7 +1038,7 @@
                 }));
 
                 operations = imported;
-                saveToStorage();
+                saveToCloud();
                 renderStats();
                 renderOperations();
                 updateClientFilter();
