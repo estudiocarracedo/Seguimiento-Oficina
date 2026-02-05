@@ -8,6 +8,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -570,15 +575,36 @@
     </div>
 
     <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCOWbNoM5fdUuIjAyFNtu_yjWiVmAMEdho",
+            authDomain: "seguimiento-carracedo-3e837.firebaseapp.com",
+            databaseURL: "https://seguimiento-carracedo-3e837-default-rtdb.firebaseio.com",
+            projectId: "seguimiento-carracedo-3e837",
+            storageBucket: "seguimiento-carracedo-3e837.firebasestorage.app",
+            messagingSenderId: "2196327624",
+            appId: "1:2196327624:web:796c6dd3e80ad89eb4e9fd"
+        };
+
+        // Inicializar Firebase
+        let database;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            console.log('✅ Firebase conectado');
+        } catch (error) {
+            console.error('Error al conectar Firebase:', error);
+        }
+
         let operations = [];
         let editingId = null;
         let exchangeRate = 0;
         let workspaceId = null;
 
-        // Cargar datos del almacenamiento en la nube al iniciar
+        // Cargar datos al iniciar
         window.addEventListener('DOMContentLoaded', async () => {
             initWorkspace();
-            await loadFromCloud();
+            await loadFromFirebase();
             await loadExchangeRate();
             renderStats();
             renderOperations();
@@ -586,106 +612,122 @@
             setupFilters();
             document.getElementById('fechaIngreso').valueAsDate = new Date();
             setupVepCalculation();
+            
+            // Escuchar cambios en tiempo real
+            listenToFirebaseChanges();
         });
 
         function initWorkspace() {
-            // Obtener o crear workspace ID desde la URL hash
             const hash = window.location.hash.substring(1);
             if (hash) {
                 workspaceId = hash;
             } else {
-                // Crear nuevo workspace ID único
                 workspaceId = 'ws_' + Date.now() + '_' + Math.random().toString(36).substring(7);
                 window.location.hash = workspaceId;
             }
-            showWorkspaceInfo();
+            console.log('Workspace ID:', workspaceId);
         }
 
-        function showWorkspaceInfo() {
-            const shareUrl = window.location.href;
-            console.log('Tu link compartido:', shareUrl);
-            // Mostrar mensaje inicial solo la primera vez
-            if (!window.location.hash || window.location.hash === '#') {
-                setTimeout(() => {
-                    alert('✅ Workspace creado!\n\nGuardá este link para acceder desde cualquier dispositivo:\n\n' + shareUrl + '\n\nTambién podés copiarlo desde la barra de direcciones.');
-                }, 1000);
-            }
-        }
-
-        async function loadFromCloud() {
-            if (!window.storage) {
-                console.warn('Cloud storage no disponible, usando localStorage como fallback');
+        // Cargar datos desde Firebase
+        async function loadFromFirebase() {
+            if (!database) {
+                console.warn('Firebase no disponible');
                 loadFromStorage();
                 return;
             }
             
             try {
-                const key = 'ops_' + workspaceId;
-                const result = await window.storage.get(key, true);
-                if (result && result.value) {
-                    operations = JSON.parse(result.value);
+                const ref = database.ref('workspaces/' + workspaceId + '/operations');
+                const snapshot = await ref.once('value');
+                if (snapshot.exists()) {
+                    operations = snapshot.val() || [];
+                    console.log('✅ Datos cargados desde Firebase:', operations.length, 'operaciones');
+                } else {
+                    console.log('ℹ️ No hay datos en Firebase, intentando localStorage');
+                    loadFromStorage();
                 }
             } catch (error) {
-                console.log('No hay operaciones guardadas en la nube, intentando localStorage');
+                console.error('Error al cargar desde Firebase:', error);
                 loadFromStorage();
             }
         }
 
-        async function saveToCloud() {
-            // Guardar tanto en cloud como en localStorage como backup
-            saveToStorage();
+        // Guardar datos en Firebase
+        async function saveToFirebase() {
+            saveToStorage(); // Backup local
             
-            if (!window.storage) {
-                return;
-            }
+            if (!database) return;
             
             try {
-                const key = 'ops_' + workspaceId;
-                await window.storage.set(key, JSON.stringify(operations), true);
+                const ref = database.ref('workspaces/' + workspaceId + '/operations');
+                await ref.set(operations);
+                console.log('✅ Datos guardados en Firebase');
             } catch (error) {
-                console.error('Error al guardar en la nube:', error);
+                console.error('Error al guardar en Firebase:', error);
             }
         }
 
-        async function loadExchangeRate() {
-            if (!window.storage) {
-                const stored = localStorage.getItem('exchangeRate_' + workspaceId);
-                if (stored) {
-                    exchangeRate = parseFloat(stored);
-                    document.getElementById('exchangeRate').value = exchangeRate;
-                    updateExchangeRateDisplay();
-                }
-                return;
-            }
+        // Escuchar cambios en tiempo real
+        function listenToFirebaseChanges() {
+            if (!database) return;
             
-            try {
-                const key = 'rate_' + workspaceId;
-                const result = await window.storage.get(key, true);
-                if (result && result.value) {
-                    exchangeRate = parseFloat(result.value);
-                    document.getElementById('exchangeRate').value = exchangeRate;
-                    updateExchangeRateDisplay();
+            const ref = database.ref('workspaces/' + workspaceId + '/operations');
+            ref.on('value', (snapshot) => {
+                if (snapshot.exists()) {
+                    const newOps = snapshot.val() || [];
+                    // Solo actualizar si los datos cambiaron
+                    if (JSON.stringify(newOps) !== JSON.stringify(operations)) {
+                        operations = newOps;
+                        renderStats();
+                        renderOperations();
+                        updateClientFilter();
+                        console.log('🔄 Datos actualizados en tiempo real');
+                    }
                 }
-            } catch (error) {
-                console.log('No hay tipo de cambio guardado');
-            }
+            });
         }
 
+        // Guardar tipo de cambio en Firebase
         async function saveExchangeRate() {
             exchangeRate = parseFloat(document.getElementById('exchangeRate').value) || 0;
             localStorage.setItem('exchangeRate_' + workspaceId, exchangeRate);
             
-            if (!window.storage) {
-                updateExchangeRateDisplay();
-                return;
+            if (database && exchangeRate > 0) {
+                try {
+                    const ref = database.ref('workspaces/' + workspaceId + '/exchangeRate');
+                    await ref.set(exchangeRate);
+                } catch (error) {
+                    console.error('Error al guardar tipo de cambio:', error);
+                }
             }
             
-            try {
-                const key = 'rate_' + workspaceId;
-                await window.storage.set(key, exchangeRate.toString(), true);
+            updateExchangeRateDisplay();
+        }
+
+        // Cargar tipo de cambio desde Firebase
+        async function loadExchangeRate() {
+            const stored = localStorage.getItem('exchangeRate_' + workspaceId);
+            
+            if (database) {
+                try {
+                    const ref = database.ref('workspaces/' + workspaceId + '/exchangeRate');
+                    const snapshot = await ref.once('value');
+                    if (snapshot.exists()) {
+                        exchangeRate = snapshot.val();
+                    } else if (stored) {
+                        exchangeRate = parseFloat(stored);
+                    }
+                } catch (error) {
+                    console.error('Error al cargar tipo de cambio:', error);
+                    if (stored) exchangeRate = parseFloat(stored);
+                }
+            } else if (stored) {
+                exchangeRate = parseFloat(stored);
+            }
+            
+            if (exchangeRate > 0) {
+                document.getElementById('exchangeRate').value = exchangeRate;
                 updateExchangeRateDisplay();
-            } catch (error) {
-                console.error('Error al guardar tipo de cambio');
             }
         }
 
@@ -931,7 +973,7 @@
                 operations.push(formData);
             }
 
-            saveToCloud();
+            saveToFirebase();
             closeModal();
             renderStats();
             renderOperations();
@@ -941,7 +983,7 @@
         function deleteOperation(id) {
             if (confirm('¿Estás seguro de eliminar esta operación?')) {
                 operations = operations.filter(o => o.id !== id);
-                saveToCloud();
+                saveToFirebase();
                 renderStats();
                 renderOperations();
                 updateClientFilter();
@@ -965,7 +1007,7 @@
             });
 
             if (updated > 0) {
-                saveToCloud();
+                saveToFirebase();
                 renderOperations();
                 alert(`✅ Se recalculó el VEP en pesos de ${updated} operación(es) usando el tipo de cambio: $${exchangeRate.toLocaleString('es-AR')}`);
             } else {
@@ -1052,7 +1094,7 @@
                 }));
 
                 operations = imported;
-                saveToCloud();
+                saveToFirebase();
                 renderStats();
                 renderOperations();
                 updateClientFilter();
