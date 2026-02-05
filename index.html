@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Seguimiento - Despacho de Aduana</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -427,9 +430,6 @@
             <button class="btn btn-primary" onclick="openNewOperationModal()">
                 + Nueva Operación
             </button>
-            <button class="btn btn-secondary" onclick="copyShareLink()" title="Copiar link para compartir entre dispositivos">
-                🔗 Copiar Link
-            </button>
             <input type="text" id="searchInput" placeholder="🔍 Buscar por carpeta, cliente, proveedor...">
             <select id="filterStatus">
                 <option value="">Todos los estados</option>
@@ -444,6 +444,18 @@
             <button class="btn btn-secondary" onclick="recalculateAllVepPesos()" title="Recalcular VEP en pesos de todas las operaciones">
                 🔄 Recalcular VEP
             </button>
+            <button class="btn btn-secondary" onclick="generatePDFReport()" style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; border: none;" title="Generar informe PDF con estadísticas y gráficos">
+                📄 Generar Informe PDF
+            </button>
+        </div>
+
+        <div class="operations-grid" id="operationsGrid"></div>
+
+        <!-- Toolbar inferior con opciones de exportación/importación -->
+        <div class="toolbar" style="margin-top: 30px; justify-content: center;">
+            <button class="btn btn-secondary" onclick="copyShareLink()" title="Copiar link para compartir entre dispositivos">
+                🔗 Copiar Link
+            </button>
             <button class="btn btn-secondary" onclick="exportToExcel()">
                 📊 Exportar Excel
             </button>
@@ -453,7 +465,10 @@
             <input type="file" id="importFile" accept=".xlsx" style="display: none;" onchange="importFromExcel(event)">
         </div>
 
-        <div class="operations-grid" id="operationsGrid"></div>
+        <!-- Footer con créditos -->
+        <div style="text-align: center; padding: 20px; margin-top: 20px; color: var(--text-muted); font-size: 0.85rem;">
+            Creado por Manuel Carracedo para Estudio Carracedo © 2025
+        </div>
     </div>
 
     <div class="modal" id="operationModal">
@@ -554,7 +569,6 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         let operations = [];
         let editingId = null;
@@ -1051,6 +1065,246 @@
             if (typeof excelDate === 'string') return excelDate;
             const date = new Date((excelDate - 25569) * 86400 * 1000);
             return date.toISOString().split('T')[0];
+        }
+
+        async function generatePDFReport() {
+            if (operations.length === 0) {
+                alert('No hay operaciones para generar el informe');
+                return;
+            }
+
+            // Mostrar mensaje de carga
+            const loadingMsg = document.createElement('div');
+            loadingMsg.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 30px 50px; border-radius: 15px; z-index: 10000; font-size: 1.2rem;';
+            loadingMsg.textContent = '📄 Generando informe PDF...';
+            document.body.appendChild(loadingMsg);
+
+            try {
+                // Calcular estadísticas por cliente
+                const clientStats = {};
+                operations.forEach(op => {
+                    if (!clientStats[op.cliente]) {
+                        clientStats[op.cliente] = {
+                            total: 0,
+                            pendiente: 0,
+                            enCurso: 0,
+                            detenido: 0,
+                            completado: 0,
+                            totalValorAna: 0,
+                            totalVepUsd: 0,
+                            totalVepPesos: 0
+                        };
+                    }
+                    
+                    const stats = clientStats[op.cliente];
+                    stats.total++;
+                    
+                    switch(op.estadoOperacion.toLowerCase()) {
+                        case 'pendiente': stats.pendiente++; break;
+                        case 'en curso': stats.enCurso++; break;
+                        case 'detenido': stats.detenido++; break;
+                        case 'completado': stats.completado++; break;
+                    }
+                    
+                    stats.totalValorAna += parseFloat(op.valorAna) || 0;
+                    stats.totalVepUsd += parseFloat(op.vepUsd) || 0;
+                    stats.totalVepPesos += parseFloat(op.vepPesos) || 0;
+                });
+
+                // Crear canvas temporal para el gráfico
+                const canvas = document.createElement('canvas');
+                canvas.width = 800;
+                canvas.height = 400;
+                document.body.appendChild(canvas);
+
+                const ctx = canvas.getContext('2d');
+                
+                const clientes = Object.keys(clientStats);
+                const totales = clientes.map(c => clientStats[c].total);
+
+                // Crear gráfico de barras
+                const chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: clientes,
+                        datasets: [{
+                            label: 'Total Operaciones',
+                            data: totales,
+                            backgroundColor: 'rgba(5, 191, 219, 0.7)',
+                            borderColor: 'rgba(5, 191, 219, 1)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Operaciones por Cliente',
+                                font: { size: 18, weight: 'bold' },
+                                color: '#0a4d68'
+                            },
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Esperar a que el gráfico se renderice
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Obtener imagen del gráfico
+                const chartImage = canvas.toDataURL('image/png');
+                
+                // Limpiar canvas
+                document.body.removeChild(canvas);
+                chart.destroy();
+
+                // Crear PDF
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'mm', 'a4');
+                
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                let yPos = 20;
+
+                // Título
+                doc.setFontSize(22);
+                doc.setTextColor(10, 77, 104);
+                doc.text('Informe de Seguimiento - Estudio Carracedo', pageWidth / 2, yPos, { align: 'center' });
+                
+                yPos += 10;
+                doc.setFontSize(12);
+                doc.setTextColor(100, 100, 100);
+                const fechaHoy = new Date().toLocaleDateString('es-AR', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                doc.text('Fecha: ' + fechaHoy, pageWidth / 2, yPos, { align: 'center' });
+                
+                yPos += 15;
+
+                // Resumen general
+                doc.setFontSize(16);
+                doc.setTextColor(10, 77, 104);
+                doc.text('Resumen General', 15, yPos);
+                
+                yPos += 10;
+                doc.setFontSize(11);
+                doc.setTextColor(0, 0, 0);
+                
+                const totalOps = operations.length;
+                const pendientes = operations.filter(o => o.estadoOperacion === 'Pendiente').length;
+                const enCurso = operations.filter(o => o.estadoOperacion === 'En curso').length;
+                const detenidos = operations.filter(o => o.estadoOperacion === 'Detenido').length;
+                const completados = operations.filter(o => o.estadoOperacion === 'Completado').length;
+
+                doc.text('Total de Operaciones: ' + totalOps, 20, yPos);
+                yPos += 7;
+                doc.text('Pendientes: ' + pendientes, 20, yPos);
+                yPos += 7;
+                doc.text('En Curso: ' + enCurso, 20, yPos);
+                yPos += 7;
+                doc.text('Detenidos: ' + detenidos, 20, yPos);
+                yPos += 7;
+                doc.text('Completados: ' + completados, 20, yPos);
+                
+                yPos += 15;
+
+                // Agregar gráfico
+                doc.addImage(chartImage, 'PNG', 15, yPos, 180, 90);
+                yPos += 100;
+
+                // Nueva página para detalles por cliente
+                doc.addPage();
+                yPos = 20;
+
+                doc.setFontSize(16);
+                doc.setTextColor(10, 77, 104);
+                doc.text('Detalle por Cliente', 15, yPos);
+                yPos += 10;
+
+                doc.setFontSize(10);
+                doc.setTextColor(0, 0, 0);
+
+                Object.keys(clientStats).sort().forEach(cliente => {
+                    const stats = clientStats[cliente];
+                    
+                    if (yPos > pageHeight - 50) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+
+                    doc.setFontSize(12);
+                    doc.setTextColor(8, 131, 149);
+                    doc.text(cliente, 15, yPos);
+                    yPos += 7;
+
+                    doc.setFontSize(10);
+                    doc.setTextColor(60, 60, 60);
+                    doc.text('  Total operaciones: ' + stats.total, 20, yPos);
+                    yPos += 6;
+                    
+                    const estadosText = '  Pendientes: ' + stats.pendiente + ' | En curso: ' + stats.enCurso + 
+                                      ' | Detenidos: ' + stats.detenido + ' | Completados: ' + stats.completado;
+                    doc.text(estadosText, 20, yPos);
+                    yPos += 6;
+                    
+                    if (stats.totalValorAna > 0) {
+                        const valorAnaFormatted = stats.totalValorAna.toLocaleString('es-AR', {
+                            minimumFractionDigits: 2, 
+                            maximumFractionDigits: 2
+                        });
+                        doc.text('  Valor en ANA (USD): $' + valorAnaFormatted, 20, yPos);
+                        yPos += 6;
+                    }
+                    
+                    if (stats.totalVepUsd > 0) {
+                        const vepUsdFormatted = stats.totalVepUsd.toLocaleString('es-AR', {
+                            minimumFractionDigits: 2, 
+                            maximumFractionDigits: 2
+                        });
+                        doc.text('  VEP Total (USD): $' + vepUsdFormatted, 20, yPos);
+                        yPos += 6;
+                    }
+                    
+                    if (stats.totalVepPesos > 0) {
+                        const vepPesosFormatted = stats.totalVepPesos.toLocaleString('es-AR', {
+                            minimumFractionDigits: 2, 
+                            maximumFractionDigits: 2
+                        });
+                        doc.text('  VEP Total (ARS): $' + vepPesosFormatted, 20, yPos);
+                        yPos += 6;
+                    }
+                    
+                    yPos += 5;
+                });
+
+                // Guardar PDF
+                const nombreArchivo = 'Informe_Seguimiento_' + new Date().toISOString().split('T')[0] + '.pdf';
+                doc.save(nombreArchivo);
+                
+                document.body.removeChild(loadingMsg);
+                alert('Informe PDF generado exitosamente');
+
+            } catch (error) {
+                console.error('Error generando PDF:', error);
+                if (document.body.contains(loadingMsg)) {
+                    document.body.removeChild(loadingMsg);
+                }
+                alert('Error al generar el PDF. Por favor, intenta de nuevo.');
+            }
         }
     </script>
 </body>
