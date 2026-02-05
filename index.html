@@ -406,8 +406,19 @@
 <body>
     <div class="container">
         <header>
-            <h1>🚢 Seguimiento Estudio Carracedo</h1>
-            <p class="subtitle">Gestión integral de despachos de aduana</p>
+            <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 20px;">
+                <div>
+                    <h1>🚢 Seguimiento Estudio Carracedo</h1>
+                    <p class="subtitle">Gestión integral de despachos de aduana</p>
+                </div>
+                <div style="background: rgba(5, 191, 219, 0.1); border: 1px solid var(--accent); border-radius: 12px; padding: 15px 20px; min-width: 250px;">
+                    <label style="display: block; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px; font-weight: 500;">💵 Tipo de Cambio del Día (USD → ARS)</label>
+                    <input type="number" id="exchangeRate" step="0.01" placeholder="Ej: 1050.50" 
+                           style="width: 100%; padding: 10px 14px; font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;"
+                           onchange="saveExchangeRate()">
+                    <div id="exchangeRateDisplay" style="margin-top: 8px; color: var(--accent); font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;"></div>
+                </div>
+            </div>
         </header>
 
         <div class="stats-grid" id="statsGrid"></div>
@@ -427,6 +438,9 @@
             <select id="filterClient">
                 <option value="">Todos los clientes</option>
             </select>
+            <button class="btn btn-secondary" onclick="recalculateAllVepPesos()" title="Recalcular VEP en pesos de todas las operaciones">
+                🔄 Recalcular VEP
+            </button>
             <button class="btn btn-secondary" onclick="exportToExcel()">
                 📊 Exportar Excel
             </button>
@@ -541,16 +555,55 @@
     <script>
         let operations = [];
         let editingId = null;
+        let exchangeRate = 0;
 
         // Cargar datos del localStorage al iniciar
         window.addEventListener('DOMContentLoaded', () => {
             loadFromStorage();
+            loadExchangeRate();
             renderStats();
             renderOperations();
             updateClientFilter();
             setupFilters();
             document.getElementById('fechaIngreso').valueAsDate = new Date();
+            setupVepCalculation();
         });
+
+        function loadExchangeRate() {
+            const stored = localStorage.getItem('exchangeRate');
+            if (stored) {
+                exchangeRate = parseFloat(stored);
+                document.getElementById('exchangeRate').value = exchangeRate;
+                updateExchangeRateDisplay();
+            }
+        }
+
+        function saveExchangeRate() {
+            exchangeRate = parseFloat(document.getElementById('exchangeRate').value) || 0;
+            localStorage.setItem('exchangeRate', exchangeRate);
+            updateExchangeRateDisplay();
+        }
+
+        function updateExchangeRateDisplay() {
+            const display = document.getElementById('exchangeRateDisplay');
+            if (exchangeRate > 0) {
+                display.textContent = `1 USD = ${exchangeRate.toLocaleString('es-AR')} ARS`;
+            } else {
+                display.textContent = '';
+            }
+        }
+
+        function setupVepCalculation() {
+            const vepUsdInput = document.getElementById('vepUsd');
+            const vepPesosInput = document.getElementById('vepPesos');
+            
+            vepUsdInput.addEventListener('input', () => {
+                if (exchangeRate > 0) {
+                    const vepUsd = parseFloat(vepUsdInput.value) || 0;
+                    vepPesosInput.value = (vepUsd * exchangeRate).toFixed(2);
+                }
+            });
+        }
 
         function loadFromStorage() {
             const stored = localStorage.getItem('aduanaOperations');
@@ -563,19 +616,25 @@
             localStorage.setItem('aduanaOperations', JSON.stringify(operations));
         }
 
-        function renderStats() {
+        function renderStats(filteredOps = null) {
+            // Si no hay operaciones filtradas, usar todas
+            const opsToCount = filteredOps || operations;
+            
             const stats = {
-                total: operations.length,
-                pendiente: operations.filter(o => o.estadoOperacion === 'Pendiente').length,
-                enCurso: operations.filter(o => o.estadoOperacion === 'En curso').length,
-                completado: operations.filter(o => o.estadoOperacion === 'Completado').length,
-                detenido: operations.filter(o => o.estadoOperacion === 'Detenido').length
+                total: opsToCount.length,
+                pendiente: opsToCount.filter(o => o.estadoOperacion === 'Pendiente').length,
+                enCurso: opsToCount.filter(o => o.estadoOperacion === 'En curso').length,
+                completado: opsToCount.filter(o => o.estadoOperacion === 'Completado').length,
+                detenido: opsToCount.filter(o => o.estadoOperacion === 'Detenido').length
             };
+
+            const filterClient = document.getElementById('filterClient')?.value;
+            const clientLabel = filterClient ? ` - ${filterClient}` : '';
 
             const statsHtml = `
                 <div class="stat-card">
                     <div class="stat-value" style="color: var(--accent);">${stats.total}</div>
-                    <div class="stat-label">Total Operaciones</div>
+                    <div class="stat-label">Total Operaciones${clientLabel}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" style="color: var(--warning);">${stats.pendiente}</div>
@@ -611,6 +670,9 @@
                 const matchClient = !filterClient || op.cliente === filterClient;
                 return matchSearch && matchStatus && matchClient;
             });
+
+            // Actualizar estadísticas con las operaciones filtradas
+            renderStats(filtered);
 
             // Ordenar: primero no completados, luego completados. Dentro de cada grupo por número de carpeta
             filtered.sort((a, b) => {
@@ -670,6 +732,14 @@
                             <span class="detail-label">ANMAT:</span>
                             <span class="detail-value">${op.estadoAnmat}</span>
                         </div>` : ''}
+                        <div class="operation-detail">
+                            <span class="detail-label">VEP USD:</span>
+                            <span class="detail-value" style="color: var(--success); font-weight: 600;">US$ ${(parseFloat(op.vepUsd) || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div class="operation-detail">
+                            <span class="detail-label">VEP ARS:</span>
+                            <span class="detail-value" style="color: var(--accent); font-weight: 600;">$ ${(parseFloat(op.vepPesos) || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
                         ${op.numeroDespacho ? `
                         <div class="operation-detail">
                             <span class="detail-label">N° Despacho:</span>
@@ -698,6 +768,7 @@
             document.getElementById('operationForm').reset();
             document.getElementById('fechaIngreso').valueAsDate = new Date();
             document.getElementById('operationModal').classList.add('active');
+            setupVepCalculation();
         }
 
         function editOperation(id) {
@@ -721,6 +792,7 @@
             document.getElementById('fechaOf').value = op.fechaOf || '';
 
             document.getElementById('operationModal').classList.add('active');
+            setupVepCalculation();
         }
 
         function closeModal() {
@@ -768,6 +840,31 @@
                 renderStats();
                 renderOperations();
                 updateClientFilter();
+            }
+        }
+
+        function recalculateAllVepPesos() {
+            if (!exchangeRate || exchangeRate <= 0) {
+                alert('Por favor, ingresá primero el Tipo de Cambio del día en la casilla de arriba.');
+                document.getElementById('exchangeRate').focus();
+                return;
+            }
+
+            let updated = 0;
+            operations.forEach(op => {
+                const vepUsd = parseFloat(op.vepUsd) || 0;
+                if (vepUsd > 0) {
+                    op.vepPesos = (vepUsd * exchangeRate).toFixed(2);
+                    updated++;
+                }
+            });
+
+            if (updated > 0) {
+                saveToStorage();
+                renderOperations();
+                alert(`✅ Se recalculó el VEP en pesos de ${updated} operación(es) usando el tipo de cambio: $${exchangeRate.toLocaleString('es-AR')}`);
+            } else {
+                alert('No hay operaciones con VEP en USD para recalcular.');
             }
         }
 
