@@ -518,10 +518,16 @@
                             <option value="">Seleccionar...</option>
                             <option value="Pendiente">Pendiente</option>
                             <option value="En revisión">En revisión</option>
+                            <option value="PosAnmat">PosAnmat</option>
                             <option value="Aprobado">Aprobado</option>
                             <option value="Rechazado">Rechazado</option>
                         </select>
                     </div>
+                </div>
+                <!-- NUEVO: Número ANMAT -->
+                <div class="form-group">
+                    <label>Número ANMAT</label>
+                    <input type="text" id="numeroAnmat" placeholder="Ej: 123456/24">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -764,7 +770,6 @@
         }
 
         function renderStats(filteredOps = null) {
-            // Si no hay operaciones filtradas, usar todas
             const opsToCount = filteredOps || operations;
             
             const stats = {
@@ -818,12 +823,9 @@
                 return matchSearch && matchStatus && matchClient;
             });
 
-            // Actualizar estadísticas con las operaciones filtradas
             renderStats(filtered);
 
-            // Ordenar: primero no completados, luego completados. Dentro de cada grupo por número de carpeta
             filtered.sort((a, b) => {
-                // Prioridad: Completado va al final
                 const aCompleted = a.estadoOperacion === 'Completado' ? 1 : 0;
                 const bCompleted = b.estadoOperacion === 'Completado' ? 1 : 0;
                 
@@ -831,7 +833,6 @@
                     return aCompleted - bCompleted;
                 }
                 
-                // Dentro del mismo estado, ordenar por número de carpeta (descendente)
                 return b.numeroCarpeta.localeCompare(a.numeroCarpeta, undefined, { numeric: true, sensitivity: 'base' });
             });
 
@@ -878,6 +879,11 @@
                         <div class="operation-detail">
                             <span class="detail-label">ANMAT:</span>
                             <span class="detail-value">${op.estadoAnmat}</span>
+                        </div>` : ''}
+                        ${op.numeroAnmat ? `
+                        <div class="operation-detail">
+                            <span class="detail-label">N° ANMAT:</span>
+                            <span class="detail-value" style="font-family: 'JetBrains Mono', monospace; color: var(--accent);">${op.numeroAnmat}</span>
                         </div>` : ''}
                         <div class="operation-detail">
                             <span class="detail-label">VEP USD:</span>
@@ -930,6 +936,7 @@
             document.getElementById('proveedor').value = op.proveedor || '';
             document.getElementById('fechaIngreso').value = op.fechaIngreso;
             document.getElementById('estadoAnmat').value = op.estadoAnmat || '';
+            document.getElementById('numeroAnmat').value = op.numeroAnmat || '';
             document.getElementById('guiaOriginal').value = op.guiaOriginal || '';
             document.getElementById('valorAna').value = op.valorAna || '';
             document.getElementById('vepUsd').value = op.vepUsd || '';
@@ -957,6 +964,7 @@
                 proveedor: document.getElementById('proveedor').value,
                 fechaIngreso: document.getElementById('fechaIngreso').value,
                 estadoAnmat: document.getElementById('estadoAnmat').value,
+                numeroAnmat: document.getElementById('numeroAnmat').value,
                 guiaOriginal: document.getElementById('guiaOriginal').value,
                 valorAna: document.getElementById('valorAna').value,
                 vepUsd: document.getElementById('vepUsd').value,
@@ -1050,6 +1058,7 @@
                 'Proveedor': op.proveedor,
                 'Fecha Ingreso': op.fechaIngreso,
                 'Estado ANMAT': op.estadoAnmat,
+                'Número ANMAT': op.numeroAnmat,
                 'Guía Original': op.guiaOriginal,
                 'Valor en Ana u$': op.valorAna,
                 'Vep u$': op.vepUsd,
@@ -1084,6 +1093,7 @@
                     proveedor: row['Proveedor'] || '',
                     fechaIngreso: row['Fecha Ingreso'] ? excelDateToJS(row['Fecha Ingreso']) : new Date().toISOString().split('T')[0],
                     estadoAnmat: row['Estado ANMAT'] || '',
+                    numeroAnmat: row['Número ANMAT'] || '',
                     guiaOriginal: row['Guía Original'] || '',
                     valorAna: row['Valor en Ana u$'] || '',
                     vepUsd: row['Vep u$'] || '',
@@ -1115,14 +1125,12 @@
                 return;
             }
 
-            // Mostrar mensaje de carga
             const loadingMsg = document.createElement('div');
             loadingMsg.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 30px 50px; border-radius: 15px; z-index: 10000; font-size: 1.2rem;';
             loadingMsg.textContent = '📄 Generando informe PDF...';
             document.body.appendChild(loadingMsg);
 
             try {
-                // Calcular estadísticas por cliente
                 const clientStats = {};
                 operations.forEach(op => {
                     if (!clientStats[op.cliente]) {
@@ -1153,7 +1161,6 @@
                     stats.totalVepPesos += parseFloat(op.vepPesos) || 0;
                 });
 
-                // Crear canvas temporal para el gráfico
                 const canvas = document.createElement('canvas');
                 canvas.width = 800;
                 canvas.height = 400;
@@ -1164,7 +1171,6 @@
                 const clientes = Object.keys(clientStats);
                 const totales = clientes.map(c => clientStats[c].total);
 
-                // Crear gráfico de barras
                 const chart = new Chart(ctx, {
                     type: 'bar',
                     data: {
@@ -1202,17 +1208,13 @@
                     }
                 });
 
-                // Esperar a que el gráfico se renderice
                 await new Promise(resolve => setTimeout(resolve, 500));
 
-                // Obtener imagen del gráfico
                 const chartImage = canvas.toDataURL('image/png');
                 
-                // Limpiar canvas
                 document.body.removeChild(canvas);
                 chart.destroy();
 
-                // Crear PDF
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF('p', 'mm', 'a4');
                 
@@ -1220,7 +1222,6 @@
                 const pageHeight = doc.internal.pageSize.getHeight();
                 let yPos = 20;
 
-                // Título
                 doc.setFontSize(22);
                 doc.setTextColor(10, 77, 104);
                 doc.text('Informe de Seguimiento - Estudio Carracedo', pageWidth / 2, yPos, { align: 'center' });
@@ -1237,7 +1238,6 @@
                 
                 yPos += 15;
 
-                // Resumen general
                 doc.setFontSize(16);
                 doc.setTextColor(10, 77, 104);
                 doc.text('Resumen General', 15, yPos);
@@ -1264,11 +1264,9 @@
                 
                 yPos += 15;
 
-                // Agregar gráfico
                 doc.addImage(chartImage, 'PNG', 15, yPos, 180, 90);
                 yPos += 100;
 
-                // Nueva página para detalles por cliente
                 doc.addPage();
                 yPos = 20;
 
@@ -1333,7 +1331,6 @@
                     yPos += 5;
                 });
 
-                // Guardar PDF
                 const nombreArchivo = 'Informe_Seguimiento_' + new Date().toISOString().split('T')[0] + '.pdf';
                 doc.save(nombreArchivo);
                 
