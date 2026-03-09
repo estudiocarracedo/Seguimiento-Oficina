@@ -8,11 +8,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -134,10 +132,7 @@
                 <button class="close-modal" onclick="closeModal()">×</button>
             </div>
             <form id="operationForm" onsubmit="saveOperation(event)">
-                <div class="form-group">
-                    <label>Número de Carpeta *</label>
-                    <input type="text" id="numeroCarpeta" required>
-                </div>
+                <div class="form-group"><label>Número de Carpeta *</label><input type="text" id="numeroCarpeta" required></div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Tipo de Operación *</label>
@@ -236,13 +231,22 @@
         window.addEventListener('DOMContentLoaded', async () => {
             window.location.hash = WORKSPACE_FIJO;
 
-            // ✅ Autenticación anónima automática
-            try {
-                await auth.signInAnonymously();
-                console.log('✅ Autenticado anónimamente');
-            } catch (error) {
-                console.error('Error de autenticación:', error);
-            }
+            // ✅ Esperar autenticación confirmada antes de cargar datos (fix Safari iOS)
+            await new Promise((resolve, reject) => {
+                auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        console.log('✅ Autenticado:', user.uid);
+                        resolve();
+                    } else {
+                        try {
+                            await auth.signInAnonymously();
+                        } catch (error) {
+                            console.error('Error de autenticación:', error);
+                            reject(error);
+                        }
+                    }
+                });
+            });
 
             await loadFromFirebase();
             await loadExchangeRate();
@@ -253,16 +257,13 @@
             document.getElementById('fechaIngreso').valueAsDate = new Date();
             setupVepCalculation();
             listenToFirebaseChanges();
-
-            // Ocultar overlay de carga
             document.getElementById('loadingOverlay').style.display = 'none';
         });
 
         async function loadFromFirebase() {
             if (!database) { loadFromStorage(); return; }
             try {
-                const ref = database.ref('workspaces/' + workspaceId + '/operations');
-                const snapshot = await ref.once('value');
+                const snapshot = await database.ref('workspaces/' + workspaceId + '/operations').once('value');
                 if (snapshot.exists()) {
                     operations = snapshot.val() || [];
                     console.log('✅ Datos cargados:', operations.length, 'operaciones');
@@ -328,15 +329,13 @@
         }
 
         function updateExchangeRateDisplay() {
-            const display = document.getElementById('exchangeRateDisplay');
-            display.textContent = exchangeRate > 0 ? `1 USD = ${exchangeRate.toLocaleString('es-AR')} ARS` : '';
+            document.getElementById('exchangeRateDisplay').textContent = exchangeRate > 0 ? `1 USD = ${exchangeRate.toLocaleString('es-AR')} ARS` : '';
         }
 
         function setupVepCalculation() {
             document.getElementById('vepUsd').addEventListener('input', () => {
-                if (exchangeRate > 0) {
+                if (exchangeRate > 0)
                     document.getElementById('vepPesos').value = ((parseFloat(document.getElementById('vepUsd').value) || 0) * exchangeRate).toFixed(2);
-                }
             });
         }
 
@@ -353,11 +352,11 @@
             const ops = filteredOps || operations;
             const filterClient = document.getElementById('filterClient')?.value;
             document.getElementById('statsGrid').innerHTML = `
-                <div class="stat-card"><div class="stat-value" style="color: var(--accent);">${ops.length}</div><div class="stat-label">Total Operaciones${filterClient ? ' - ' + filterClient : ''}</div></div>
-                <div class="stat-card"><div class="stat-value" style="color: var(--warning);">${ops.filter(o => o.estadoOperacion === 'Pendiente').length}</div><div class="stat-label">Pendientes</div></div>
-                <div class="stat-card"><div class="stat-value" style="color: var(--primary-light);">${ops.filter(o => o.estadoOperacion === 'En curso').length}</div><div class="stat-label">En Curso</div></div>
-                <div class="stat-card"><div class="stat-value" style="color: var(--success);">${ops.filter(o => o.estadoOperacion === 'Completado').length}</div><div class="stat-label">Completados</div></div>
-                <div class="stat-card"><div class="stat-value" style="color: var(--danger);">${ops.filter(o => o.estadoOperacion === 'Detenido').length}</div><div class="stat-label">Detenidos</div></div>
+                <div class="stat-card"><div class="stat-value" style="color:var(--accent)">${ops.length}</div><div class="stat-label">Total Operaciones${filterClient ? ' - ' + filterClient : ''}</div></div>
+                <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${ops.filter(o=>o.estadoOperacion==='Pendiente').length}</div><div class="stat-label">Pendientes</div></div>
+                <div class="stat-card"><div class="stat-value" style="color:var(--primary-light)">${ops.filter(o=>o.estadoOperacion==='En curso').length}</div><div class="stat-label">En Curso</div></div>
+                <div class="stat-card"><div class="stat-value" style="color:var(--success)">${ops.filter(o=>o.estadoOperacion==='Completado').length}</div><div class="stat-label">Completados</div></div>
+                <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${ops.filter(o=>o.estadoOperacion==='Detenido').length}</div><div class="stat-label">Detenidos</div></div>
             `;
         }
 
